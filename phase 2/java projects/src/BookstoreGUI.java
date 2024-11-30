@@ -31,7 +31,7 @@ public class BookstoreGUI {
         JLabel tableLabel = new JLabel("Select Table:");
         tableSelector = new JComboBox<>();
         JLabel operationLabel = new JLabel("Operation:");
-        operationSelector = new JComboBox<>(new String[]{"Insert", "Fetch", "Delete"});
+        operationSelector = new JComboBox<>(new String[]{"Insert", "Fetch", "Delete", "Update"});
         JButton executeButton = new JButton("Execute");
 
         topPanel.add(tableLabel);
@@ -41,7 +41,7 @@ public class BookstoreGUI {
         topPanel.add(executeButton);
 
         // Input Panel
-        inputPanel = new JPanel(new GridLayout(0, 2));
+        inputPanel = new JPanel(new GridLayout(0, 3)); // Updated for conditional fetch
         inputPanel.setVisible(true);
 
         // Table Panel
@@ -75,9 +75,12 @@ public class BookstoreGUI {
         String selectedOperation = (String) operationSelector.getSelectedItem();
 
         inputPanel.removeAll(); // Clear existing input fields
+        inputPanel.setLayout(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5); // Add padding between components
+        gbc.fill = GridBagConstraints.HORIZONTAL; // Ensure components stretch to fill the space
 
         if (selectedOperation.equals("Insert")) {
-            // Generate text fields for all columns during insertion
             ArrayList<String> columns = dbOps.fetchTableColumnNames(selectedTable);
             ArrayList<Boolean> notNulls = dbOps.fetchNotNullConstraints(selectedTable);
 
@@ -88,12 +91,78 @@ public class BookstoreGUI {
                 JLabel label = new JLabel(column + (isNotNull ? " *" : "") + ":");
                 JTextField textField = new JTextField();
 
-                inputPanel.add(label);
-                inputPanel.add(textField);
+                gbc.gridx = 0; // Column 0 for labels
+                gbc.gridy = i; // Row for the current element
+                gbc.weightx = 0.2; // Allocate less width for the label
+                inputPanel.add(label, gbc);
+
+                gbc.gridx = 1; // Column 1 for text fields
+                gbc.weightx = 0.8; // Allocate more width for the text field
+                inputPanel.add(textField, gbc);
             }
         } else if (selectedOperation.equals("Delete")) {
-            // Generate combo boxes for primary keys during deletion
             ArrayList<String> primaryKeys = dbOps.fetchPrimaryKeyColumns(selectedTable);
+
+            for (int i = 0; i < primaryKeys.size(); i++) {
+                String pk = primaryKeys.get(i);
+
+                JLabel label = new JLabel(pk + " (PK):");
+                JComboBox<String> comboBox = new JComboBox<>();
+                ArrayList<String> pkValues = dbOps.fetchPrimaryKeyValues(selectedTable, pk);
+
+                for (String value : pkValues) {
+                    comboBox.addItem(value);
+                }
+
+                gbc.gridx = 0; // Column 0 for labels
+                gbc.gridy = i; // Row for the current element
+                gbc.weightx = 0.2;
+                inputPanel.add(label, gbc);
+
+                gbc.gridx = 1; // Column 1 for combo boxes
+                gbc.weightx = 0.8;
+                inputPanel.add(comboBox, gbc);
+            }
+        } else if (selectedOperation.equals("Fetch")) {
+            JLabel attributeLabel = new JLabel("Attribute:");
+            JComboBox<String> attributeSelector = new JComboBox<>();
+            ArrayList<String> columns = dbOps.fetchTableColumnNames(selectedTable);
+
+            for (String column : columns) {
+                attributeSelector.addItem(column);
+            }
+
+            JLabel operatorLabel = new JLabel("Operator:");
+            JComboBox<String> operatorSelector = new JComboBox<>(new String[]{">", ">=", "<", "<=", "=", "!="});
+
+            JLabel valueLabel = new JLabel("Value:");
+            JTextField valueField = new JTextField();
+
+            gbc.gridx = 0; // Column 0 for labels
+            gbc.gridy = 0; // First row
+            inputPanel.add(attributeLabel, gbc);
+
+            gbc.gridx = 1; // Column 1 for attribute selector
+            inputPanel.add(attributeSelector, gbc);
+
+            gbc.gridy = 1; // Second row
+            gbc.gridx = 0; // Reset to Column 0
+            inputPanel.add(operatorLabel, gbc);
+
+            gbc.gridx = 1; // Column 1 for operator selector
+            inputPanel.add(operatorSelector, gbc);
+
+            gbc.gridy = 2; // Third row
+            gbc.gridx = 0; // Reset to Column 0
+            inputPanel.add(valueLabel, gbc);
+
+            gbc.gridx = 1; // Column 1 for value field
+            inputPanel.add(valueField, gbc);
+        } else if (selectedOperation.equals("Update")) {
+            ArrayList<String> columns = dbOps.fetchTableColumnNames(selectedTable);
+            ArrayList<String> primaryKeys = dbOps.fetchPrimaryKeyColumns(selectedTable);
+
+            int row = 0;
 
             for (String pk : primaryKeys) {
                 JLabel label = new JLabel(pk + " (PK):");
@@ -103,46 +172,37 @@ public class BookstoreGUI {
                 for (String value : pkValues) {
                     comboBox.addItem(value);
                 }
-                inputPanel.add(label);
-                inputPanel.add(comboBox);
-            }
-        } else if (selectedOperation.equals("Fetch")) {
-            // Add input fields for conditional fetching
-            JLabel conditionLabel = new JLabel("Condition (optional):");
 
-            // ComboBox for attribute (column names)
-            JComboBox<String> attributeSelector = new JComboBox<>();
-            ArrayList<String> columns = dbOps.fetchTableColumnNames(selectedTable);
+                gbc.gridx = 0;
+                gbc.gridy = row++;
+                gbc.weightx = 0.2;
+                inputPanel.add(label, gbc);
+
+                gbc.gridx = 1;
+                gbc.weightx = 0.8;
+                inputPanel.add(comboBox, gbc);
+            }
+
             for (String column : columns) {
-                attributeSelector.addItem(column);
+                if (!primaryKeys.contains(column)) {
+                    JLabel label = new JLabel(column + ":");
+                    JTextField textField = new JTextField();
+
+                    gbc.gridx = 0;
+                    gbc.gridy = row++;
+                    gbc.weightx = 0.2;
+                    inputPanel.add(label, gbc);
+
+                    gbc.gridx = 1;
+                    gbc.weightx = 0.8;
+                    inputPanel.add(textField, gbc);
+                }
             }
-
-            // ComboBox for comparison operators
-            JComboBox<String> operatorSelector = new JComboBox<>(new String[]{">", ">=", "<", "<=", "=", "!="});
-
-            // TextField for input value
-            JTextField valueField = new JTextField();
-
-            inputPanel.add(conditionLabel);
-            inputPanel.add(new JLabel()); // Empty label for alignment
-            inputPanel.add(new JLabel("Attribute:"));
-            inputPanel.add(attributeSelector);
-            inputPanel.add(new JLabel("Operator:"));
-            inputPanel.add(operatorSelector);
-            inputPanel.add(new JLabel("Value:"));
-            inputPanel.add(valueField);
-
-            // Store components for handling fetch
-            inputPanel.putClientProperty("attributeSelector", attributeSelector);
-            inputPanel.putClientProperty("operatorSelector", operatorSelector);
-            inputPanel.putClientProperty("valueField", valueField);
         }
 
-        // Refresh the input panel
         inputPanel.revalidate();
         inputPanel.repaint();
     }
-
 
 
 
@@ -151,43 +211,49 @@ public class BookstoreGUI {
         String selectedOperation = (String) operationSelector.getSelectedItem();
 
         if (selectedOperation.equals("Fetch")) {
-            handleFetch(selectedTable); // Pass the table name
+            handleFetch(selectedTable);
         } else if (selectedOperation.equals("Insert")) {
             handleInsert(selectedTable);
         } else if (selectedOperation.equals("Delete")) {
             handleDelete(selectedTable);
+        } else if (selectedOperation.equals("Update")) {
+            handleUpdate(selectedTable);
         }
     }
 
+    private void handleFetch(String selectedTable) {
+        String column = "";
+        String operator = "";
+        String value = "";
 
-    private void handleFetch(String tableName) {
-        // Retrieve components for condition
-        JComboBox<String> attributeSelector = (JComboBox<String>) inputPanel.getClientProperty("attributeSelector");
-        JComboBox<String> operatorSelector = (JComboBox<String>) inputPanel.getClientProperty("operatorSelector");
-        JTextField valueField = (JTextField) inputPanel.getClientProperty("valueField");
+        for (int i = 0; i < inputPanel.getComponentCount(); i++) {
+            Component component = inputPanel.getComponent(i);
+            if (component instanceof JComboBox) {
+                JComboBox<?> comboBox = (JComboBox<?>) component;
+                if (column.isEmpty()) {
+                    column = (String) comboBox.getSelectedItem();
+                } else {
+                    operator = (String) comboBox.getSelectedItem();
+                }
+            } else if (component instanceof JTextField) {
+                value = ((JTextField) component).getText().trim();
+            }
+        }
 
         String condition = "";
-        if (attributeSelector != null && operatorSelector != null && valueField != null) {
-            String attribute = (String) attributeSelector.getSelectedItem();
-            String operator = (String) operatorSelector.getSelectedItem();
-            String value = valueField.getText().trim();
-
-            if (!value.isEmpty()) {
-                condition = attribute + " " + operator + " '" + value + "'";
-            }
+        if (!column.isEmpty() && !operator.isEmpty() && !value.isEmpty()) {
+            condition = column + " " + operator + " '" + value + "'";
         }
 
         ResultSet rs;
         if (condition.isEmpty()) {
-            // Fetch entire table
-            rs = dbOps.fetchRecords(tableName);
+            rs = dbOps.fetchRecords(selectedTable);
         } else {
-            // Fetch with condition
-            rs = dbOps.fetchRecordsWithCondition(tableName, condition);
+            rs = dbOps.fetchRecordsWithCondition(selectedTable, condition);
         }
 
         if (rs == null) {
-            JOptionPane.showMessageDialog(null, "No data available for table: " + tableName, "Info", JOptionPane.INFORMATION_MESSAGE);
+            JOptionPane.showMessageDialog(null, "No data available for table: " + selectedTable, "Info", JOptionPane.INFORMATION_MESSAGE);
             return;
         }
 
@@ -200,10 +266,6 @@ public class BookstoreGUI {
         }
     }
 
-
-
-
-
     private void handleInsert(String tableName) {
         Component[] components = inputPanel.getComponents();
         ArrayList<String> columns = dbOps.fetchTableColumnNames(tableName);
@@ -213,9 +275,6 @@ public class BookstoreGUI {
         for (Component component : components) {
             if (component instanceof JTextField) {
                 values[valueIndex] = ((JTextField) component).getText();
-                valueIndex++;
-            } else if (component instanceof JComboBox) {
-                values[valueIndex] = (String) ((JComboBox<?>) component).getSelectedItem();
                 valueIndex++;
             }
         }
@@ -245,4 +304,67 @@ public class BookstoreGUI {
 
         refreshInputFields();
     }
+
+    private void handleUpdate(String tableName) {
+        Component[] components = inputPanel.getComponents();
+        ArrayList<String> columns = dbOps.fetchTableColumnNames(tableName);
+        ArrayList<String> primaryKeys = dbOps.fetchPrimaryKeyColumns(tableName);
+
+        HashMap<String, String> pkValues = new HashMap<>();
+        HashMap<String, String> columnValues = new HashMap<>();
+
+        int columnIndex = 0;
+        for (Component component : components) {
+            if (component instanceof JTextField) {
+                String value = ((JTextField) component).getText().trim();
+                String column = columns.get(columnIndex);
+
+                if (!value.isEmpty()) {
+                    if (primaryKeys.contains(column)) {
+                        pkValues.put(column, value); // Add to primary key map
+                    } else {
+                        columnValues.put(column, value); // Add to update fields map
+                    }
+                }
+                columnIndex++;
+            } else if (component instanceof JComboBox) {
+                String value = (String) ((JComboBox<?>) component).getSelectedItem();
+                String column = columns.get(columnIndex);
+
+                if (value != null && !value.isEmpty()) {
+                    if (primaryKeys.contains(column)) {
+                        pkValues.put(column, value); // Add to primary key map
+                    } else {
+                        columnValues.put(column, value); // Add to update fields map
+                    }
+                }
+                columnIndex++;
+            }
+        }
+
+        // Validate primary keys
+        if (pkValues.isEmpty()) {
+            JOptionPane.showMessageDialog(null, "Primary key values are required for the update operation.", "Update Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        // Ensure at least one field is provided for update
+        if (columnValues.isEmpty()) {
+            JOptionPane.showMessageDialog(null, "No fields provided for updating. Please enter at least one value to update.", "Update Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        // Perform the update operation
+        String result = dbOps.updateRecord(tableName, pkValues, columnValues);
+        JOptionPane.showMessageDialog(null, result, "Update Status", JOptionPane.INFORMATION_MESSAGE);
+
+        refreshInputFields(); // Refresh the input fields
+    }
+
+
+
+
+
+
+
 }

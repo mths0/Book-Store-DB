@@ -112,7 +112,7 @@ public class DatabaseOperations {
 
     public ResultSet fetchRecords(String tableName) {
         try {
-            String query = "SELECT * FROM " + tableName;
+            String query = "SELECT * FROM `" + tableName + "`"; // Enclose table name in backticks
             Statement stmt = connection.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY);
             return stmt.executeQuery(query);
         } catch (SQLException e) {
@@ -120,6 +120,7 @@ public class DatabaseOperations {
         }
         return null;
     }
+
 
     public String insertRecord(String tableName, String[] columns, String[] values) {
         try {
@@ -220,15 +221,67 @@ public class DatabaseOperations {
     }
     public ResultSet fetchRecordsWithCondition(String tableName, String condition) {
         try {
-            String query = "SELECT * FROM " + tableName + " WHERE " + condition;
+            String query = "SELECT * FROM `" + tableName + "` WHERE " + condition; // Enclose table name in backticks
             Statement stmt = connection.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY);
             return stmt.executeQuery(query);
         } catch (SQLException e) {
-            JOptionPane.showMessageDialog(null, "Error in fetching records: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            e.printStackTrace();
         }
         return null;
     }
 
+    public String updateRecord(String tableName, HashMap<String, String> pkValues, HashMap<String, String> columnValues) {
+        try {
+            // Build SET clause for fields to update
+            StringBuilder setClause = new StringBuilder();
+            for (String column : columnValues.keySet()) {
+                if (setClause.length() > 0) setClause.append(", ");
+                setClause.append(column).append(" = ?");
+            }
+
+            // Build WHERE clause for primary keys
+            StringBuilder whereClause = new StringBuilder();
+            for (String pkColumn : pkValues.keySet()) {
+                if (whereClause.length() > 0) whereClause.append(" AND ");
+                whereClause.append(pkColumn).append(" = ?");
+            }
+
+            // Combine clauses into the final query
+            String query = "UPDATE " + tableName + " SET " + setClause + " WHERE " + whereClause;
+            PreparedStatement stmt = connection.prepareStatement(query);
+
+            // Bind values for SET clause
+            int paramIndex = 1;
+            for (String value : columnValues.values()) {
+                stmt.setString(paramIndex++, value);
+            }
+
+            // Bind values for WHERE clause
+            for (String value : pkValues.values()) {
+                stmt.setString(paramIndex++, value);
+            }
+
+            int rowsAffected = stmt.executeUpdate();
+            stmt.close();
+
+            if (rowsAffected > 0) {
+                return "Record updated successfully.";
+            } else {
+                return "No matching record found for the update.";
+            }
+        } catch (SQLException e) {
+            return "Error updating record: " + e.getMessage();
+        }
+    }
 
 
 }
+
+
+
+
+
+
+
+
+
