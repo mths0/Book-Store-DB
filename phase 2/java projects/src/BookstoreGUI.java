@@ -1,169 +1,248 @@
 import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.sql.*;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.HashMap;
 
 public class BookstoreGUI {
-    private JComboBox<String> tableSelector;
-    private JPanel attributesPanel;
     private DatabaseOperations dbOps;
+    private JComboBox<String> tableSelector;
+    private JComboBox<String> operationSelector;
+    private JPanel inputPanel;
+    private JTable table;
 
-    public BookstoreGUI() {
-        dbOps = new DatabaseOperations();
+    public BookstoreGUI(DatabaseOperations dbOps) {
+        this.dbOps = dbOps;
     }
 
     public void createAndShowGUI() {
         JFrame frame = new JFrame("Bookstore Management");
-        frame.setSize(600, 400);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setSize(800, 600);
 
-        JPanel panel = new JPanel();
-        panel.setLayout(null);
-        frame.add(panel);
+        JPanel mainPanel = new JPanel(new BorderLayout());
 
+        // Top Panel
+        JPanel topPanel = new JPanel(new FlowLayout());
         JLabel tableLabel = new JLabel("Select Table:");
-        tableLabel.setBounds(10, 10, 100, 25);
-        panel.add(tableLabel);
+        tableSelector = new JComboBox<>();
+        JLabel operationLabel = new JLabel("Operation:");
+        operationSelector = new JComboBox<>(new String[]{"Insert", "Fetch", "Delete"});
+        JButton executeButton = new JButton("Execute");
 
-        tableSelector = new JComboBox<>(new String[]{"Book", "Customer", "Order", "PaymentInformation"});
-        tableSelector.setBounds(110, 10, 150, 25);
-        panel.add(tableSelector);
+        topPanel.add(tableLabel);
+        topPanel.add(tableSelector);
+        topPanel.add(operationLabel);
+        topPanel.add(operationSelector);
+        topPanel.add(executeButton);
 
-        JButton insertButton = new JButton("Insert");
-        insertButton.setBounds(10, 50, 100, 25);
-        panel.add(insertButton);
+        // Input Panel
+        inputPanel = new JPanel(new GridLayout(0, 2));
+        inputPanel.setVisible(true);
 
-        JButton fetchButton = new JButton("Fetch");
-        fetchButton.setBounds(120, 50, 100, 25);
-        panel.add(fetchButton);
+        // Table Panel
+        table = new JTable();
+        JScrollPane scrollPane = new JScrollPane(table);
 
-        JButton deleteButton = new JButton("Delete");
-        deleteButton.setBounds(230, 50, 100, 25);
-        panel.add(deleteButton);
+        mainPanel.add(topPanel, BorderLayout.NORTH);
+        mainPanel.add(scrollPane, BorderLayout.CENTER);
+        mainPanel.add(inputPanel, BorderLayout.SOUTH);
 
-        JTextArea resultArea = new JTextArea();
-        JScrollPane scrollPane = new JScrollPane(resultArea);
-        scrollPane.setBounds(10, 150, 550, 200);
-        panel.add(scrollPane);
-
-        attributesPanel = new JPanel();
-        attributesPanel.setBounds(10, 90, 550, 50);
-        attributesPanel.setLayout(new GridLayout(2, 6, 5, 5)); // Adjust grid size based on number of attributes
-        panel.add(attributesPanel);
-
-        tableSelector.addActionListener(e -> loadAttributesForTable());
-        insertButton.addActionListener(e -> insertRecord(resultArea));
-        fetchButton.addActionListener(e -> fetchRecords(resultArea));
-        deleteButton.addActionListener(e -> deleteRecord(resultArea));
-
+        frame.add(mainPanel);
         frame.setVisible(true);
-        loadAttributesForTable(); // Load attributes for the default table
+
+        loadTables();
+
+        // Event Listeners
+        operationSelector.addActionListener(e -> refreshInputFields());
+        executeButton.addActionListener(e -> handleOperation());
     }
 
-    private void loadAttributesForTable() {
+    private void loadTables() {
+        ArrayList<String> tables = dbOps.getTableNames();
+        for (String table : tables) {
+            tableSelector.addItem(table);
+        }
+        refreshInputFields();
+    }
+
+    private void refreshInputFields() {
         String selectedTable = (String) tableSelector.getSelectedItem();
-        attributesPanel.removeAll();
+        String selectedOperation = (String) operationSelector.getSelectedItem();
 
-        if (selectedTable != null) {
-            String[] attributes = dbOps.fetchTableColumnNames(selectedTable); // Fetch column names dynamically
-            for (String attribute : attributes) {
-                attributesPanel.add(new JLabel(attribute));
-                attributesPanel.add(new JTextField());
+        inputPanel.removeAll(); // Clear existing input fields
+
+        if (selectedOperation.equals("Insert")) {
+            // Generate text fields for all columns during insertion
+            ArrayList<String> columns = dbOps.fetchTableColumnNames(selectedTable);
+            ArrayList<Boolean> notNulls = dbOps.fetchNotNullConstraints(selectedTable);
+
+            for (int i = 0; i < columns.size(); i++) {
+                String column = columns.get(i);
+                boolean isNotNull = notNulls.get(i);
+
+                JLabel label = new JLabel(column + (isNotNull ? " *" : "") + ":");
+                JTextField textField = new JTextField();
+
+                inputPanel.add(label);
+                inputPanel.add(textField);
             }
-        }
+        } else if (selectedOperation.equals("Delete")) {
+            // Generate combo boxes for primary keys during deletion
+            ArrayList<String> primaryKeys = dbOps.fetchPrimaryKeyColumns(selectedTable);
 
-        attributesPanel.revalidate();
-        attributesPanel.repaint();
-    }
+            for (String pk : primaryKeys) {
+                JLabel label = new JLabel(pk + " (PK):");
+                JComboBox<String> comboBox = new JComboBox<>();
+                ArrayList<String> pkValues = dbOps.fetchPrimaryKeyValues(selectedTable, pk);
 
-    private void insertRecord(JTextArea resultArea) {
-        try {
-            String selectedTable = (String) tableSelector.getSelectedItem();
-            if (selectedTable == null) {
-                resultArea.setText("Please select a table!");
-                return;
-            }
-
-            Component[] components = attributesPanel.getComponents();
-            String[] columnValues = new String[components.length / 2];
-
-            for (int i = 0; i < components.length; i += 2) {
-                JTextField textField = (JTextField) components[i + 1];
-                columnValues[i / 2] = textField.getText().trim();
-            }
-
-            dbOps.insertRecord(selectedTable, columnValues);
-            resultArea.setText("Record inserted successfully!");
-        } catch (Exception e) {
-            resultArea.setText("Error inserting record: " + e.getMessage());
-        }
-    }
-
-    private void fetchRecords(JTextArea resultArea) {
-        try {
-            String selectedTable = (String) tableSelector.getSelectedItem();
-            if (selectedTable == null) {
-                resultArea.setText("Please select a table!");
-                return;
-            }
-
-            ResultSet rs = dbOps.fetchRecords(selectedTable);
-            StringBuilder result = new StringBuilder();
-
-            ResultSetMetaData metaData = rs.getMetaData();
-            int columnCount = metaData.getColumnCount();
-
-            // Header
-            for (int i = 1; i <= columnCount; i++) {
-                result.append(metaData.getColumnName(i)).append("\t");
-            }
-            result.append("\n");
-
-            // Rows
-            while (rs.next()) {
-                for (int i = 1; i <= columnCount; i++) {
-                    result.append(rs.getString(i)).append("\t");
+                for (String value : pkValues) {
+                    comboBox.addItem(value);
                 }
-                result.append("\n");
+                inputPanel.add(label);
+                inputPanel.add(comboBox);
+            }
+        } else if (selectedOperation.equals("Fetch")) {
+            // Add input fields for conditional fetching
+            JLabel conditionLabel = new JLabel("Condition (optional):");
+
+            // ComboBox for attribute (column names)
+            JComboBox<String> attributeSelector = new JComboBox<>();
+            ArrayList<String> columns = dbOps.fetchTableColumnNames(selectedTable);
+            for (String column : columns) {
+                attributeSelector.addItem(column);
             }
 
-            resultArea.setText(result.toString());
-        } catch (Exception e) {
-            resultArea.setText("Error fetching records: " + e.getMessage());
+            // ComboBox for comparison operators
+            JComboBox<String> operatorSelector = new JComboBox<>(new String[]{">", ">=", "<", "<=", "=", "!="});
+
+            // TextField for input value
+            JTextField valueField = new JTextField();
+
+            inputPanel.add(conditionLabel);
+            inputPanel.add(new JLabel()); // Empty label for alignment
+            inputPanel.add(new JLabel("Attribute:"));
+            inputPanel.add(attributeSelector);
+            inputPanel.add(new JLabel("Operator:"));
+            inputPanel.add(operatorSelector);
+            inputPanel.add(new JLabel("Value:"));
+            inputPanel.add(valueField);
+
+            // Store components for handling fetch
+            inputPanel.putClientProperty("attributeSelector", attributeSelector);
+            inputPanel.putClientProperty("operatorSelector", operatorSelector);
+            inputPanel.putClientProperty("valueField", valueField);
+        }
+
+        // Refresh the input panel
+        inputPanel.revalidate();
+        inputPanel.repaint();
+    }
+
+
+
+
+    private void handleOperation() {
+        String selectedTable = (String) tableSelector.getSelectedItem();
+        String selectedOperation = (String) operationSelector.getSelectedItem();
+
+        if (selectedOperation.equals("Fetch")) {
+            handleFetch(selectedTable); // Pass the table name
+        } else if (selectedOperation.equals("Insert")) {
+            handleInsert(selectedTable);
+        } else if (selectedOperation.equals("Delete")) {
+            handleDelete(selectedTable);
         }
     }
 
-    private void deleteRecord(JTextArea resultArea) {
-        try {
-            String selectedTable = (String) tableSelector.getSelectedItem();
-            if (selectedTable == null) {
-                resultArea.setText("Please select a table!");
-                return;
+
+    private void handleFetch(String tableName) {
+        // Retrieve components for condition
+        JComboBox<String> attributeSelector = (JComboBox<String>) inputPanel.getClientProperty("attributeSelector");
+        JComboBox<String> operatorSelector = (JComboBox<String>) inputPanel.getClientProperty("operatorSelector");
+        JTextField valueField = (JTextField) inputPanel.getClientProperty("valueField");
+
+        String condition = "";
+        if (attributeSelector != null && operatorSelector != null && valueField != null) {
+            String attribute = (String) attributeSelector.getSelectedItem();
+            String operator = (String) operatorSelector.getSelectedItem();
+            String value = valueField.getText().trim();
+
+            if (!value.isEmpty()) {
+                condition = attribute + " " + operator + " '" + value + "'";
             }
-
-            Component[] components = attributesPanel.getComponents();
-            String keyColumn = dbOps.getPrimaryKey(selectedTable);
-            String keyValue = "";
-
-            for (int i = 0; i < components.length; i += 2) {
-                JLabel label = (JLabel) components[i];
-                if (label.getText().equalsIgnoreCase(keyColumn)) {
-                    JTextField textField = (JTextField) components[i + 1];
-                    keyValue = textField.getText().trim();
-                    break;
-                }
-            }
-
-            if (keyValue.isEmpty()) {
-                resultArea.setText("Please enter a value for the primary key!");
-                return;
-            }
-
-            dbOps.deleteRecord(selectedTable, keyColumn, keyValue);
-            resultArea.setText("Record deleted successfully!");
-        } catch (Exception e) {
-            resultArea.setText("Error deleting record: " + e.getMessage());
         }
+
+        ResultSet rs;
+        if (condition.isEmpty()) {
+            // Fetch entire table
+            rs = dbOps.fetchRecords(tableName);
+        } else {
+            // Fetch with condition
+            rs = dbOps.fetchRecordsWithCondition(tableName, condition);
+        }
+
+        if (rs == null) {
+            JOptionPane.showMessageDialog(null, "No data available for table: " + tableName, "Info", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        try {
+            DefaultTableModel model = dbOps.buildTableModel(rs);
+            table.setModel(model);
+            rs.close();
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(null, "Error: " + e.getMessage(), "Fetch Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+
+
+
+
+    private void handleInsert(String tableName) {
+        Component[] components = inputPanel.getComponents();
+        ArrayList<String> columns = dbOps.fetchTableColumnNames(tableName);
+        String[] values = new String[columns.size()];
+
+        int valueIndex = 0;
+        for (Component component : components) {
+            if (component instanceof JTextField) {
+                values[valueIndex] = ((JTextField) component).getText();
+                valueIndex++;
+            } else if (component instanceof JComboBox) {
+                values[valueIndex] = (String) ((JComboBox<?>) component).getSelectedItem();
+                valueIndex++;
+            }
+        }
+
+        String result = dbOps.insertRecord(tableName, columns.toArray(new String[0]), values);
+        JOptionPane.showMessageDialog(null, result, "Insert Status", JOptionPane.INFORMATION_MESSAGE);
+        refreshInputFields();
+    }
+
+    private void handleDelete(String tableName) {
+        Component[] components = inputPanel.getComponents();
+        ArrayList<String> primaryKeys = dbOps.fetchPrimaryKeyColumns(tableName);
+
+        HashMap<String, String> pkValues = new HashMap<>();
+        int pkIndex = 0;
+        for (Component component : components) {
+            if (component instanceof JComboBox && pkIndex < primaryKeys.size()) {
+                pkValues.put(primaryKeys.get(pkIndex), (String) ((JComboBox<?>) component).getSelectedItem());
+                pkIndex++;
+            }
+        }
+
+        for (String pk : pkValues.keySet()) {
+            String result = dbOps.deleteRecord(tableName, pk, pkValues.get(pk));
+            JOptionPane.showMessageDialog(null, result, "Delete Status", JOptionPane.INFORMATION_MESSAGE);
+        }
+
+        refreshInputFields();
     }
 }

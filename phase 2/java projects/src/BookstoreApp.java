@@ -1,7 +1,7 @@
 public class BookstoreApp {
     public static void main(String[] args) {
-        // Initialize GUI
-        BookstoreGUI gui = new BookstoreGUI();
+        DatabaseOperations dbOps = new DatabaseOperations();
+        BookstoreGUI gui = new BookstoreGUI(dbOps);
         gui.createAndShowGUI();
     }
 }
