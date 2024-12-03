@@ -100,7 +100,14 @@ public class BookstoreGUI {
                 gbc.weightx = 0.2; // Allocate less width for the label
                 inputPanel.add(label, gbc);
 
-                if (selectedTable.equals("order_has_book") && column.equals("Book_id1")) {
+                if (selectedTable.equals("orders") && column.equals("total_price")) {
+                    // Create a combo box with only "0" as the option for total_price
+                    JComboBox<String> totalPriceComboBox = new JComboBox<>(new String[]{"0"});
+                    totalPriceComboBox.setEnabled(false); // Disable it to prevent user modification
+                    gbc.gridx = 1; // Column 1 for the combo box
+                    gbc.weightx = 0.8; // Allocate more width for the combo box
+                    inputPanel.add(totalPriceComboBox, gbc);
+                } else if (selectedTable.equals("order_has_book") && column.equals("Book_id1")) {
                     // Dropdown for Book_id1
                     JComboBox<String> bookDropdown = new JComboBox<>();
                     ArrayList<String> bookIds = dbOps.fetchPrimaryKeyValues("book", "book_id");
@@ -378,12 +385,21 @@ public class BookstoreGUI {
     }
 
     private void handleInsert(String tableName) {
+        // Fetch the list of columns for the table
         Component[] components = inputPanel.getComponents();
         ArrayList<String> columns = dbOps.fetchTableColumnNames(tableName);
         String[] values = new String[columns.size()];
 
         int valueIndex = 0;
+
+        // Iterate through input components and populate the values array
         for (Component component : components) {
+            if (valueIndex >= values.length) {
+                // Prevent accessing out-of-bounds index
+                System.err.println("Mismatch between columns and input fields. Extra inputs ignored.");
+                break;
+            }
+
             if (component instanceof JTextField) {
                 values[valueIndex] = ((JTextField) component).getText();
                 valueIndex++;
@@ -393,8 +409,16 @@ public class BookstoreGUI {
             }
         }
 
+        // Debugging: Ensure values array matches columns
+        if (valueIndex != values.length) {
+            System.err.println("Warning: Mismatch between the number of columns and provided input values.");
+            System.err.println("Columns size: " + columns.size() + ", Input fields processed: " + valueIndex);
+        }
+
+        // Insert record into the database
         String result = dbOps.insertRecord(tableName, columns.toArray(new String[0]), values);
 
+        // Handle result feedback to the user
         if (result.startsWith("Constraint Violation")) {
             JOptionPane.showMessageDialog(null, result, "Constraint Violation", JOptionPane.ERROR_MESSAGE);
         } else if (result.startsWith("Error")) {
@@ -403,8 +427,10 @@ public class BookstoreGUI {
             JOptionPane.showMessageDialog(null, result, "Insert Status", JOptionPane.INFORMATION_MESSAGE);
         }
 
+        // Refresh the input fields for the next operation
         refreshInputFields();
     }
+
 
 
 
