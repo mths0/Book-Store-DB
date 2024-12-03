@@ -44,9 +44,27 @@ public class DatabaseOperations {
         }
         return columns;
     }
+    public ArrayList<String> fetchCorrespondingForeignKeyValues(String tableName, String firstForeignKey, String secondForeignKey, String firstForeignKeyValue) {
+        ArrayList<String> values = new ArrayList<>();
+        String query = "SELECT DISTINCT " + secondForeignKey + " FROM " + tableName + " WHERE " + firstForeignKey + " = ?";
+
+        try (PreparedStatement stmt = connection.prepareStatement(query)) {
+            stmt.setString(1, firstForeignKeyValue);
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                values.add(rs.getString(1));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return values;
+    }
+
 
     public ArrayList<String> fetchPrimaryKeyColumns(String tableName) {
         ArrayList<String> primaryKeyColumns = new ArrayList<>();
+        System.out.println("Fetching primary keys for table: " + tableName);
+
         try {
             DatabaseMetaData metaData = connection.getMetaData();
             ResultSet rs = metaData.getPrimaryKeys(null, null, tableName);
@@ -59,6 +77,10 @@ public class DatabaseOperations {
         }
         return primaryKeyColumns;
     }
+
+
+
+
 
     public ArrayList<String> fetchPrimaryKeyValues(String tableName, String primaryKeyColumn) {
         ArrayList<String> values = new ArrayList<>();
@@ -75,6 +97,22 @@ public class DatabaseOperations {
         return values;
     }
 
+    public ArrayList<String> fetchDependentPrimaryKeyValues(String tableName, String dependentColumn, String keyColumn, String keyValue) {
+        ArrayList<String> values = new ArrayList<>();
+        String query = "SELECT DISTINCT " + dependentColumn + " FROM " + tableName + " WHERE " + keyColumn + " = ?";
+
+        try (PreparedStatement stmt = connection.prepareStatement(query)) {
+            stmt.setString(1, keyValue);
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                values.add(rs.getString(1));
+            }
+            rs.close();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return values;
+    }
 
     public ArrayList<Boolean> fetchNotNullConstraints(String tableName) {
         ArrayList<Boolean> notNulls = new ArrayList<>();
@@ -110,7 +148,7 @@ public class DatabaseOperations {
     }
 
 
-    public ResultSet fetchRecords(String tableName) {
+    public ResultSet selectRecords(String tableName) {
         try {
             String query = "SELECT * FROM `" + tableName + "`"; // Enclose table name in backticks
             Statement stmt = connection.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY);
@@ -143,23 +181,40 @@ public class DatabaseOperations {
             int rows = stmt.executeUpdate();
             stmt.close();
             return "Inserted " + rows + " row(s) successfully.";
+        } catch (SQLIntegrityConstraintViolationException e) {
+            return "Constraint Violation: " + e.getMessage(); // Return a detailed error message.
         } catch (SQLException e) {
             return "Error: " + e.getMessage();
         }
     }
 
-    public String deleteRecord(String tableName, String primaryKeyColumn, String primaryKeyValue) {
-        try {
-            String query = "DELETE FROM " + tableName + " WHERE " + primaryKeyColumn + " = ?";
-            PreparedStatement stmt = connection.prepareStatement(query);
-            stmt.setString(1, primaryKeyValue);
-            int rowsAffected = stmt.executeUpdate();
-            stmt.close();
-            return rowsAffected > 0 ? "Record deleted successfully." : "Record not found.";
+
+    public String deleteRecord(String tableName, HashMap<String, String> pkValues) {
+        StringBuilder whereClause = new StringBuilder();
+        ArrayList<String> values = new ArrayList<>();
+
+        for (String column : pkValues.keySet()) {
+            if (whereClause.length() > 0) {
+                whereClause.append(" AND ");
+            }
+            whereClause.append(column).append(" = ?");
+            values.add(pkValues.get(column));
+        }
+
+        String query = "DELETE FROM " + tableName + " WHERE " + whereClause;
+        try (PreparedStatement stmt = connection.prepareStatement(query)) {
+            for (int i = 0; i < values.size(); i++) {
+                stmt.setString(i + 1, values.get(i));
+            }
+            int rows = stmt.executeUpdate();
+            return rows > 0 ? "Record deleted successfully." : "No matching record found.";
         } catch (SQLException e) {
-            return "Error: " + e.getMessage();
+            return "Error deleting record: " + e.getMessage();
         }
     }
+
+
+
 
     public String deleteFromPaymentInformation(int orderId, int paymentId) {
         try {
@@ -274,14 +329,46 @@ public class DatabaseOperations {
         }
     }
 
+    public ArrayList<String> fetchDependentKeyValues(String tableName, String keyColumn, String keyValue, String dependentColumn) {
+        ArrayList<String> dependentValues = new ArrayList<>();
+        String query = "SELECT DISTINCT " + dependentColumn + " FROM " + tableName + " WHERE " + keyColumn + " = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(query)) {
+            stmt.setString(1, keyValue);
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                dependentValues.add(rs.getString(1));
+            }
+            rs.close();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return dependentValues;
+    }
+
+
+    public String updateOrderTotalPrice() {
+        try {
+            String query = """
+            UPDATE orders o
+            SET o.total_price = (
+                SELECT SUM(b.price * ohb.quantity)
+                FROM order_has_book ohb
+                JOIN book b ON ohb.Book_id1 = b.book_id
+                WHERE ohb.Order_id1 = o.order_id
+            );
+        """;
+
+            PreparedStatement stmt = connection.prepareStatement(query);
+            int rowsAffected = stmt.executeUpdate();
+            stmt.close();
+
+            return "Order total prices updated successfully for " + rowsAffected + " orders.";
+        } catch (SQLException e) {
+            return "Error updating total prices: " + e.getMessage();
+        }
+    }
+
+
 
 }
-
-
-
-
-
-
-
-
 
